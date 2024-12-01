@@ -10,7 +10,10 @@ const char* ssid = "iBam";
 const char* password = "123456789";
 
 // Python server details 
-const char* serverUrl = "http://172.20.10.3:5001/upload";  // Change this to your Python server address
+const char* serverUrl = "http://YOUR_PYTHON_SERVER_IP:PORT/upload";
+
+// Streaming control
+bool isStreaming = false;
 
 void startCameraServer();
 void setupLedFlash(int pin);
@@ -20,7 +23,6 @@ void captureAndSendPhoto() {
   camera_fb_t * fb = NULL;
   
   // Take a photo
-  Serial.println("Taking a picture...");
   fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("Camera capture failed");
@@ -35,11 +37,9 @@ void captureAndSendPhoto() {
   int httpResponseCode = http.POST(fb->buf, fb->len);
   
   if (httpResponseCode > 0) {
-    Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-    String response = http.getString();
-    Serial.println(response);
+    Serial.printf("Frame sent. Response: %d\n", httpResponseCode);
   } else {
-    Serial.printf("Error code: %d\n", httpResponseCode);
+    Serial.printf("Error sending frame: %d\n", httpResponseCode);
   }
   
   // Clean up
@@ -109,9 +109,9 @@ void setup() {
     s->set_brightness(s, 1);
     s->set_saturation(s, -2);
   }
-  if(config.pixel_format == PIXFORMAT_JPEG){
-    s->set_framesize(s, FRAMESIZE_QVGA);
-  }
+  // Set lower resolution for faster streaming
+  s->set_framesize(s, FRAMESIZE_VGA);  // or FRAMESIZE_CIF for even smaller size
+  s->set_quality(s, 12);  // Lower quality for faster transmission
 
 #if defined(LED_GPIO_NUM)
   setupLedFlash(LED_GPIO_NUM);
@@ -126,21 +126,27 @@ void setup() {
   }
   Serial.println("");
   Serial.println("WiFi connected");
-
-  startCameraServer();
-
-  Serial.print("Camera Ready! Use 'http://");
-  Serial.print(WiFi.localIP());
-  Serial.println("' to connect");
-  Serial.println("Send '1' to take and upload a picture");
+  Serial.println("Send '1' to start streaming");
+  Serial.println("Send '2' to stop streaming");
 }
 
 void loop() {
   if (Serial.available() > 0) {
     char input = Serial.read();
-    if (input == '1') {
-      captureAndSendPhoto();
+    if (input == '1' && !isStreaming) {
+      Serial.println("Starting stream...");
+      isStreaming = true;
+    } 
+    else if (input == '2' && isStreaming) {
+      Serial.println("Stopping stream...");
+      isStreaming = false;
     }
   }
-  delay(100);  // Small delay to prevent CPU hogging
+
+  if (isStreaming) {
+    captureAndSendPhoto();
+    delay(100);  // ~10 FPS
+  }
+  
+  delay(10);  // Small delay when not streaming
 }
