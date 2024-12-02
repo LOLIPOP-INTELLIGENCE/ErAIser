@@ -10,10 +10,10 @@ const char* ssid = "iBam";
 const char* password = "123456789";
 
 // Python server details 
-const char* serverUrl = "http://YOUR_PYTHON_SERVER_IP:PORT/upload";
+const char* serverUrl = "http://172.20.10.3:5001/upload";
 
 // Streaming control
-bool isStreaming = false;
+bool isItStreaming = false;
 
 void startCameraServer();
 void setupLedFlash(int pin);
@@ -73,11 +73,11 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  config.frame_size = FRAMESIZE_UXGA;
+  config.frame_size = FRAMESIZE_HD;  // Set to HD resolution
   config.pixel_format = PIXFORMAT_JPEG;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   config.fb_location = CAMERA_FB_IN_PSRAM;
-  config.jpeg_quality = 12;
+  config.jpeg_quality = 4;  // High quality
   config.fb_count = 1;
   
   if(config.pixel_format == PIXFORMAT_JPEG){
@@ -109,9 +109,11 @@ void setup() {
     s->set_brightness(s, 1);
     s->set_saturation(s, -2);
   }
-  // Set lower resolution for faster streaming
-  s->set_framesize(s, FRAMESIZE_VGA);  // or FRAMESIZE_CIF for even smaller size
-  s->set_quality(s, 12);  // Lower quality for faster transmission
+  s->set_framesize(s, FRAMESIZE_HD);
+  s->set_quality(s, 4);
+  s->set_brightness(s, 0);
+  s->set_contrast(s, 0);
+  s->set_saturation(s, 0);
 
 #if defined(LED_GPIO_NUM)
   setupLedFlash(LED_GPIO_NUM);
@@ -133,19 +135,19 @@ void setup() {
 void loop() {
   if (Serial.available() > 0) {
     char input = Serial.read();
-    if (input == '1' && !isStreaming) {
+    if (input == '1' && !isItStreaming) {
       Serial.println("Starting stream...");
-      isStreaming = true;
+      isItStreaming = true;
     } 
-    else if (input == '2' && isStreaming) {
+    else if (input == '2' && isItStreaming) {
       Serial.println("Stopping stream...");
-      isStreaming = false;
+      isItStreaming = false;
     }
   }
 
-  if (isStreaming) {
+  if (isItStreaming) {
     captureAndSendPhoto();
-    delay(100);  // ~10 FPS
+    delay(200);  // ~5 FPS
   }
   
   delay(10);  // Small delay when not streaming

@@ -45,4 +45,4 @@ if __name__ == '__main__':
         os.makedirs(UPLOAD_FOLDER)
         
     print("Server started. Waiting for frames...")
-    app.run(host='0.0.0.0', port=5000, threaded=True)
+    app.run(host='0.0.0.0', port=5001, threaded=True)
