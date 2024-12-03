@@ -10,13 +10,38 @@ const char* ssid = "iBam";
 const char* password = "123456789";
 
 // Python server details 
-const char* serverUrl = "http://172.20.10.3:5001/upload";
+const char* serverUrl = "http://172.20.10.3:5002/upload";
+const char* finishUrl = "http://172.20.10.3:5002/finished";
 
 // Streaming control
+const int buttonPin = 8;
 bool isItStreaming = false;
+unsigned long lastDebounceTime = 0;  // Last time the button was pressed
+unsigned long debounceDelay = 50;    // Debounce time in milliseconds
+int lastButtonState = HIGH;          // Previous reading from the button
+int buttonState;                     // Current stable state of the button
+
 
 void startCameraServer();
 void setupLedFlash(int pin);
+
+// Function to send finished notification
+void sendFinishedNotification() {
+    HTTPClient http;
+    http.begin(finishUrl);
+    http.addHeader("Content-Type", "application/json");
+    
+    // Send the POST request
+    int httpResponseCode = http.POST("{}");
+    
+    if (httpResponseCode > 0) {
+        Serial.printf("Finished notification sent. Response: %d\n", httpResponseCode);
+    } else {
+        Serial.printf("Error sending finished notification: %d\n", httpResponseCode);
+    }
+    
+    http.end();
+}
 
 // Function to capture and send photo
 void captureAndSendPhoto() {
@@ -49,6 +74,7 @@ void captureAndSendPhoto() {
 
 void setup() {
   Serial.begin(115200);
+  pinMode(buttonPin, INPUT_PULLUP);
   while(!Serial);
   Serial.setDebugOutput(true);
   Serial.println();
@@ -126,24 +152,48 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
+
+  buttonState = digitalRead(buttonPin);
+
   Serial.println("");
   Serial.println("WiFi connected");
-  Serial.println("Send '1' to start streaming");
-  Serial.println("Send '2' to stop streaming");
+  Serial.println("Click button to start streaming");
 }
 
 void loop() {
-  if (Serial.available() > 0) {
-    char input = Serial.read();
-    if (input == '1' && !isItStreaming) {
-      Serial.println("Starting stream...");
-      isItStreaming = true;
-    } 
-    else if (input == '2' && isItStreaming) {
-      Serial.println("Stopping stream...");
-      isItStreaming = false;
+
+  int reading = digitalRead(buttonPin);
+
+  // If the button state has changed, reset the debouncing timer
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }  
+
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }  
+
+  // Check if enough time has passed since the last state change
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // If the button state has changed:
+    if (reading != buttonState) {
+      buttonState = reading;
+
+      // Only toggle if the new button state is LOW (pressed)
+      if (buttonState == LOW) {
+        bool previousStreamingState = isItStreaming;
+        isItStreaming = !isItStreaming;
+        Serial.println(isItStreaming ? "Starting stream..." : "Stopping stream...");
+
+        if (previousStreamingState && !isItStreaming) {
+            sendFinishedNotification();
+        }        
+      }
     }
   }
+
+  lastButtonState = reading;
+
 
   if (isItStreaming) {
     captureAndSendPhoto();

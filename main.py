@@ -1,6 +1,10 @@
 import os
 
 from openai import AzureOpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 api_base = os.getenv("AZURE_OPENAI_ENDPOINT")
 api_key= os.getenv("AZURE_OPENAI_API_KEY")
@@ -25,7 +29,7 @@ response = client.chat.completions.create(
             { 
                 "type": "image_url",
                 "image_url": {
-                    "url": ""
+                    "url": "https://i.ytimg.com/vi/CBDVKCywCYY/hq720.jpg?sqp=-oaymwEhCK4FEIIDSFryq4qpAxMIARUAAAAAGAElAADIQj0AgKJD&rs=AOn4CLCeDlUOwuYzqlitBja3-QwpTDZzpg"
                 }
             }
         ] } 
@@ -33,4 +37,5 @@ response = client.chat.completions.create(
     max_tokens=2000 
 )
 
+import pdb; pdb.set_trace()
 print(response)
