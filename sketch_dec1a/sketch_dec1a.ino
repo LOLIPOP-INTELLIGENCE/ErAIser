@@ -1,6 +1,7 @@
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 #define CAMERA_MODEL_XIAO_ESP32S3 // Has PSRAM
 #include "camera_pins.h"
@@ -12,6 +13,7 @@ const char* password = "123456789";
 // Python server details 
 const char* serverUrl = "http://172.20.10.3:5002/upload";
 const char* finishUrl = "http://172.20.10.3:5002/finished";
+const char* responseUrl = "http://172.20.10.3:5002/get_response";
 
 // Streaming control
 const int buttonPin = 8;
@@ -25,6 +27,47 @@ int buttonState;                     // Current stable state of the button
 void startCameraServer();
 void setupLedFlash(int pin);
 
+void getGPTResponse() {
+    HTTPClient http;
+    int attempts = 0;
+    const int MAX_ATTEMPTS = 60;  // Try for 60 seconds
+    
+    Serial.println("Waiting for GPT response...");
+    
+    while (attempts < MAX_ATTEMPTS) {
+        http.begin(responseUrl);
+        int httpCode = http.GET();
+        
+        if (httpCode == 200) {  // Response is ready
+            String payload = http.getString();
+            StaticJsonDocument<2048> doc;
+            DeserializationError error = deserializeJson(doc, payload);
+            
+            if (!error) {
+                const char* response = doc["response"];
+                Serial.println("\nGPT Response:");
+                Serial.println(response);
+                http.end();
+                return;
+            }
+        }
+        else if (httpCode == 202) {  // Still processing
+            if (attempts % 5 == 0) {  // Print status every 5 seconds
+                Serial.println("Still processing...");
+            }
+        }
+        else {
+            Serial.printf("Error getting response: %d\n", httpCode);
+        }
+        
+        http.end();
+        delay(1000);
+        attempts++;
+    }
+    
+    Serial.println("Timeout waiting for GPT response");
+}
+
 // Function to send finished notification
 void sendFinishedNotification() {
     HTTPClient http;
@@ -33,14 +76,10 @@ void sendFinishedNotification() {
     
     // Send the POST request
     int httpResponseCode = http.POST("{}");
-    
-    if (httpResponseCode > 0) {
-        Serial.printf("Finished notification sent. Response: %d\n", httpResponseCode);
-    } else {
-        Serial.printf("Error sending finished notification: %d\n", httpResponseCode);
-    }
-    
     http.end();
+
+    Serial.println("Processing started...");
+    getGPTResponse();
 }
 
 // Function to capture and send photo

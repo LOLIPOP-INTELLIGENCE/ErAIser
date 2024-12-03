@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import datetime
 import os
 import cv2
@@ -9,6 +9,7 @@ from typing import Optional, Dict, Union
 from openai import AzureOpenAI
 from dotenv import load_dotenv
 
+latest_response = None
 load_dotenv()
 client_id = os.getenv('IMGUR_CLIENT_ID')
 app = Flask(__name__)
@@ -233,8 +234,10 @@ def upload_file():
 
 @app.route('/finished', methods=['POST'])
 def process_video():
+    global latest_response
     try:
         print("Processing video from frames...")
+        latest_response = None
         
         # Create video from frames
         video_path = frames_to_video(
@@ -269,8 +272,9 @@ def process_video():
             print(f"Image URL: {img_url}")
             print(f"Delete hash: {result['image_data']['deletehash']}")
 
-            response = getResponse(img_url=img_url)
-            print(response)
+            latest_response = getResponse(img_url=img_url)
+            print("GPT Response:", latest_response)
+            return jsonify({'status': 'Processing complete'}), 200
         else:
             print(f"Upload failed: {result.get('error', 'Unknown error')}")        
         
@@ -278,6 +282,14 @@ def process_video():
     except Exception as e:
         print(f"Error during processing: {str(e)}")
         return f'Error: {str(e)}', 500
+
+@app.route('/get_response', methods=['GET'])
+def get_response():
+    global latest_response
+    if latest_response is None:
+        return jsonify({'response': 'Processing not complete yet'}), 202  # 202 means "accepted but processing"
+    return jsonify({'response': latest_response}), 200
+
 
 if __name__ == '__main__':
     # Clear or create new directories
