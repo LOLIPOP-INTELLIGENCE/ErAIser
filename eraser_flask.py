@@ -43,7 +43,7 @@ def getResponse(img_url):
             { "role": "user", "content": [  
                 { 
                     "type": "text", 
-                    "text": "Answer this question for me. Do chain of thought to explain your thought process" 
+                    "text": "Answer this question for me. Do chain of thought to explain your thought process. The text response you return will be printed on a single line OLED display so make sure your answer is super concise - super concise! Also make sure you don't use any weird symbols. And don't use any lines. And don't do markdown formatting. Super concise is key! Your answer should be literally one line. It's ok if it's not as explained but it should be within a line." 
                 },
                 { 
                     "type": "image_url",

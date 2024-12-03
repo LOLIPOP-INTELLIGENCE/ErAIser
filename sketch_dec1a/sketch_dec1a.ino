@@ -2,6 +2,9 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 #define CAMERA_MODEL_XIAO_ESP32S3 // Has PSRAM
 #include "camera_pins.h"
@@ -9,6 +12,14 @@
 // WiFi credentials
 const char* ssid = "iBam";
 const char* password = "123456789";
+
+// Display configuration
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3C
+#define SDA_PIN 5
+#define SCL_PIN 7
 
 // Python server details 
 const char* serverUrl = "http://172.20.10.3:5002/upload";
@@ -23,9 +34,32 @@ unsigned long debounceDelay = 50;    // Debounce time in milliseconds
 int lastButtonState = HIGH;          // Previous reading from the button
 int buttonState;                     // Current stable state of the button
 
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Scrolling text configuration
+String currentDisplayText = "Waiting for response...";
+int textWidth;
+int xPos;
+const int scrollSpeed = 2;
+unsigned long lastScrollTime = 0;
+const int scrollDelay = 50;
 
 void startCameraServer();
 void setupLedFlash(int pin);
+
+void updateScrollingText(const char* newText) {
+    currentDisplayText = String(newText);
+    
+    // Recalculate text width
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.setTextSize(2);
+    display.getTextBounds(currentDisplayText.c_str(), 0, 0, &x1, &y1, &w, &h);
+    textWidth = w;
+    
+    // Reset position to start scrolling from right
+    xPos = SCREEN_WIDTH;
+}
 
 void getGPTResponse() {
     HTTPClient http;
@@ -33,6 +67,7 @@ void getGPTResponse() {
     const int MAX_ATTEMPTS = 60;  // Try for 60 seconds
     
     Serial.println("Waiting for GPT response...");
+    updateScrollingText("Waiting for GPT response...");
     
     while (attempts < MAX_ATTEMPTS) {
         http.begin(responseUrl);
@@ -47,6 +82,7 @@ void getGPTResponse() {
                 const char* response = doc["response"];
                 Serial.println("\nGPT Response:");
                 Serial.println(response);
+                updateScrollingText(response);
                 http.end();
                 return;
             }
@@ -54,10 +90,12 @@ void getGPTResponse() {
         else if (httpCode == 202) {  // Still processing
             if (attempts % 5 == 0) {  // Print status every 5 seconds
                 Serial.println("Still processing...");
+                updateScrollingText("Still processing...");
             }
         }
         else {
             Serial.printf("Error getting response: %d\n", httpCode);
+            updateScrollingText("Error getting response");
         }
         
         http.end();
@@ -66,6 +104,7 @@ void getGPTResponse() {
     }
     
     Serial.println("Timeout waiting for GPT response");
+    updateScrollingText("Timeout waiting for response");
 }
 
 // Function to send finished notification
@@ -117,6 +156,23 @@ void setup() {
   while(!Serial);
   Serial.setDebugOutput(true);
   Serial.println();
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  // Initialize display
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+      Serial.println("SSD1306 allocation failed");
+      for(;;);
+  } else {
+    Serial.println("SSD1306 Display initialisation success");
+  }  
+
+  // Setup display initial state
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextWrap(false);
+  updateScrollingText("Ready to start...");
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -197,6 +253,7 @@ void setup() {
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("Click button to start streaming");
+  updateScrollingText("WiFi connected. Press button to start.");
 }
 
 void loop() {
@@ -222,6 +279,9 @@ void loop() {
       if (buttonState == LOW) {
         bool previousStreamingState = isItStreaming;
         isItStreaming = !isItStreaming;
+        if (isItStreaming) {
+          updateScrollingText("Starting stream...");
+        }
         Serial.println(isItStreaming ? "Starting stream..." : "Stopping stream...");
 
         if (previousStreamingState && !isItStreaming) {
@@ -238,6 +298,22 @@ void loop() {
     captureAndSendPhoto();
     delay(200);  // ~5 FPS
   }
+
+  // Update scrolling text
+  if (millis() - lastScrollTime >= scrollDelay) {
+      xPos -= scrollSpeed;
+      
+      if (xPos < -textWidth) {
+          xPos = SCREEN_WIDTH;
+      }
+      
+      display.clearDisplay();
+      display.setCursor(xPos, (SCREEN_HEIGHT - 16) / 2);
+      display.print(currentDisplayText);
+      display.display();
+      
+      lastScrollTime = millis();
+  }  
   
   delay(10);  // Small delay when not streaming
 }
